@@ -31,7 +31,7 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".CharRoomActivity"
+        <activity android:name=".ChatRoomActivity"
             android:screenOrientation="portrait"/>
     </application>
 

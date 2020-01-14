@@ -7,7 +7,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.serializer.SerializerFeature;
-import com.test.myliveroom.CharRoomActivity;
+import com.test.myliveroom.ChatRoomActivity;
 import com.test.myliveroom.connection.PeerConnectionManager;
 
 import org.java_websocket.client.WebSocketClient;
@@ -15,7 +15,6 @@ import org.java_websocket.handshake.ServerHandshake;
 import org.webrtc.IceCandidate;
 import org.webrtc.SessionDescription;
 
-import java.io.Serializable;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
@@ -52,7 +51,7 @@ public class JavaWebSocket {
             @Override
             public void onOpen(ServerHandshake handshakedata) {
                 Log.i("TAG", "onOpen");
-                CharRoomActivity.openActivity(activity);
+                ChatRoomActivity.openActivity(activity);
             }
 
             @Override
@@ -90,16 +89,35 @@ public class JavaWebSocket {
         mSocketClient.connect();
     }
 
+    // 忽略证书
+    public static class TrustManagerTest implements X509TrustManager{
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
+        }
+    }
+
     private void handleMessage(String message) {
         Map map = JSON.parseObject(message);
         String eventName = (String) map.get("eventName");
         // p2p通信
-        if(eventName.equals("__peers")){
+        if(eventName.equals("_peers")){
             handleJoinRoom(map);
-        }else if(eventName.equals("__ice_candidate")){
+        }else if(eventName.equals("_ice_candidate")){
             // 对方的ice_candidate
             handleRemaoteCandidate(map);
-        } else if(eventName.equals("__answer")){
+        } else if(eventName.equals("_answer")){
             // 对方的sdp
             handleAnswer(map);
         }
@@ -142,6 +160,7 @@ public class JavaWebSocket {
         if(data != null){
             arr = (JSONArray) data.get("connections");
             String js = JSONObject.toJSONString(arr, SerializerFeature.WriteClassName);
+            Log.i("TAG", js);
             ArrayList<String> connections =
                     (ArrayList<String>) JSONObject.parseArray(js, String.class);
             String myID = (String) map.get("you");
@@ -171,11 +190,11 @@ public class JavaWebSocket {
         mSocketClient.send(jsonString);
     }
 
-    public void sendOffer(String id, SessionDescription description) {
+    public void sendOffer(String id, SessionDescription sdp) {
         // 传入设定好的json格式
         Map<String, Object> childMap1 = new HashMap<>();
         childMap1.put("type", "offer");
-        childMap1.put("sdp", description);
+        childMap1.put("sdp", sdp.description);
 
         Map<String, Object> childMap = new HashMap<>();
         childMap.put("socketId", id);
@@ -205,22 +224,9 @@ public class JavaWebSocket {
         mSocketClient.send(jsonString);
     }
 
-    // 忽略证书
-    public static class TrustManagerTest implements X509TrustManager{
-
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[0];
+    public void close() {
+        if (mSocketClient != null) {
+            mSocketClient.close();
         }
     }
 }

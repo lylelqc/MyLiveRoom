@@ -1,8 +1,9 @@
 package com.test.myliveroom.connection;
 
+import android.media.AudioManager;
 import android.util.Log;
 
-import com.test.myliveroom.CharRoomActivity;
+import com.test.myliveroom.ChatRoomActivity;
 import com.test.myliveroom.socket.JavaWebSocket;
 
 import org.webrtc.AudioSource;
@@ -10,6 +11,7 @@ import org.webrtc.AudioTrack;
 import org.webrtc.Camera1Enumerator;
 import org.webrtc.Camera2Enumerator;
 import org.webrtc.CameraEnumerator;
+import org.webrtc.CameraVideoCapturer;
 import org.webrtc.DataChannel;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
@@ -30,7 +32,6 @@ import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 import org.webrtc.audio.JavaAudioDeviceModule;
 
-import java.io.CharArrayReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -60,7 +61,7 @@ public class PeerConnectionManager {
     private boolean videoEnable;
     private ExecutorService executor;
     private PeerConnectionFactory mFactory;
-    private CharRoomActivity context;
+    private ChatRoomActivity context;
     private EglBase eglBase;
 
     private MediaStream localStream;
@@ -85,6 +86,9 @@ public class PeerConnectionManager {
     // 1v1 别人给你通话
     // 会议室 1.第一次进入 caller
     private Role curRole;
+    // 声音服务类
+    private AudioManager mAudioManager;
+
     enum Role {
         Caller,
         Receiver;
@@ -100,7 +104,7 @@ public class PeerConnectionManager {
         executor = Executors.newSingleThreadExecutor();
     }
 
-    public void initContext(CharRoomActivity context, EglBase eglBase){
+    public void initContext(ChatRoomActivity context, EglBase eglBase){
         this.context = context;
         this.eglBase = eglBase;
         iceServers = new ArrayList<>();
@@ -423,5 +427,103 @@ public class PeerConnectionManager {
         public void onSetFailure(String s) {
 
         }
+    }
+
+    public void toggleSpeaker(boolean mic) {
+        if (localAudioTrack != null) {
+            // 切换是否允许将本地的麦克风数据推送到远端
+            localAudioTrack.setEnabled(mic);
+        }
+    }
+
+
+    public void toggleLarge(boolean enableSpeaker) {
+        if (mAudioManager != null) {
+            mAudioManager.setSpeakerphoneOn(enableSpeaker);
+        }
+    }
+
+    /**
+     *  摄像头切换
+     *  调整摄像头前置后置
+     */
+    public void switchCamera() {
+        if (videoCapturer == null)
+            return;
+
+        if (videoCapturer instanceof CameraVideoCapturer) {
+            CameraVideoCapturer cameraVideoCapturer = (CameraVideoCapturer) videoCapturer;
+            cameraVideoCapturer.switchCamera(null);
+        }
+
+    }
+
+    /**
+     * 耗时操作  webrtc内部访问网络
+     */
+    public void exitRoom() {
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                ArrayList<String> myCopy;
+                myCopy = (ArrayList) connectionIdArray.clone();
+                for (String Id : myCopy) {
+                    closePeerConnection( Id);
+                }
+                // 释放ID集合
+                if (connectionIdArray != null) {
+                    connectionIdArray.clear();
+                }
+                // 释放音频源
+                if (audioSource != null) {
+                    audioSource.dispose();
+                    audioSource = null;
+                }
+                // 释放视频源
+                if (videoSource != null) {
+                    videoSource.dispose();
+                    videoSource = null;
+                }
+                // 停止预览摄像头
+                if (videoCapturer != null) {
+                    try {
+                        videoCapturer.stopCapture();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    videoCapturer.dispose();
+                    videoCapturer = null;
+                }
+                // 释放Surfacetext
+                if (surfaceTextureHelper != null) {
+                    surfaceTextureHelper.dispose();
+                    surfaceTextureHelper = null;
+                }
+                if (mFactory != null) {
+                    mFactory.dispose();
+                    mFactory = null;
+                }
+                if (webSocket != null) {
+                    webSocket.close();
+                }
+            }
+        });
+    }
+
+    /**
+     * 关闭底层连接
+     * @param connectionId
+     */
+    private void closePeerConnection(String connectionId) {
+        // 拿到连接的封装对象
+        Peer mPeer = connectionPeerDic.get(connectionId);
+        if (mPeer != null) {
+            // 关闭了P2P连接
+            mPeer.pc.close();
+        }
+        connectionPeerDic.remove(connectionId);
+        connectionIdArray.remove(connectionId);
+//        通知UI层更新
+        context.onCloseWithId(connectionId);
     }
 }
