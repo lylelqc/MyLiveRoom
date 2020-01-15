@@ -35,7 +35,7 @@ public class ChatRoomActivity extends AppCompatActivity {
     private Map<String, SurfaceViewRenderer> videoViews = new HashMap<>();
     private List<String> person = new ArrayList<>();
     private int mScreenWidth;
-    private final String TAG = "tag";
+    private static final String TAG = "TAG";
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {

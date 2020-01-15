@@ -53,7 +53,7 @@ public class PeerConnectionManager {
     //    googHighpassFilter     高通滤波器
     private static final String AUDIO_HIGH_PASS_FILTER_CONSTRAINT = "googHighpassFilter";
 
-    private static final String TAG = PeerConnectionManager.class.getSimpleName();
+    private static final String TAG = "TAG";
 
     private List<PeerConnection> mPeerConnections;
 
@@ -115,14 +115,50 @@ public class PeerConnectionManager {
         PeerConnection.IceServer iceServer = PeerConnection.IceServer.builder("stun:121.41.33.93:3478?transport=udp")
                 .setUsername("").setPassword("").createIceServer();
         // http
-        PeerConnection.IceServer iceServer1 = PeerConnection.IceServer.builder("stun:121.41.33.93:3478?transport=udp")
+        PeerConnection.IceServer iceServer1 = PeerConnection.IceServer.builder("turn:121.41.33.93:3478?transport=udp")
                 .setUsername("ddssingsong").setPassword("123456").createIceServer();
         iceServers.add(iceServer);
         iceServers.add(iceServer1);
     }
 
+    public void onRemoveRoom(String socketId) {
+        closePeerConnection(socketId);
+    }
+
+    public void onRemoteJoinToRoom(String socketId) {
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                /*可能出现一进入房间， 就已经有其他人进入房间，并且给你发送一个_peer_new*/
+                if (localStream == null) {
+                    createLocalStream();
+                }
+                Peer peer = new Peer(socketId);
+                // tianjia bendiliu
+                peer.pc.addStream(localStream);
+                connectionIdArray.add(socketId);
+                connectionPeerDic.put(socketId, peer);
+            }
+        });
+    }
+
+    public void onReceiveOffer(String socketId, String description) {
+        // 角色发生变化 ----- 由主叫变成 被叫
+        Log.i(TAG, " 11  PeerConnectionManager  onReceiveOffer: ");
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                curRole = Role.Receiver;
+                Peer mPeer = connectionPeerDic.get(socketId);
+                SessionDescription sdp = new SessionDescription(SessionDescription.Type.OFFER, description);
+                mPeer.pc.setRemoteDescription(mPeer,sdp);
+            }
+        });
+    }
+
     public void onRemoteAnswer(String id, String sdp) {
         // 对方的会话 sdp
+        Log.i(TAG, " 10  PeerConnectionManager  onReceiverAnswer: ");
         executor.execute(new Runnable() {
             @Override
             public void run() {
@@ -157,6 +193,7 @@ public class PeerConnectionManager {
         this.myId = id;
         // peerConnection  大量初始化，需要用子线程
         // 1.会议室已经有人，
+        // 自己需要对方的sdp来连接
         executor.execute(new Runnable() {
             @Override
             public void run() {
@@ -211,9 +248,11 @@ public class PeerConnectionManager {
         return mediaConstraints;
     }
 
-    // 为所有数据添加流
+    // 为所有连接添加流
     private void addStream() {
+        Log.v(TAG, "2 PeerConnectionManager  为所有连接添加流");
         for (Map.Entry<String, Peer> entry : connectionPeerDic.entrySet()){
+            Log.i(TAG, entry.getKey() + " - "+ entry.getValue().pc.toString());
             if(localStream == null){
                 createLocalStream();
             }
@@ -225,7 +264,6 @@ public class PeerConnectionManager {
      * 建立对会议室每个用户的链接
      */
     private void createPeerConnections() {
-
         for(String id : connectionIdArray){
             Peer peer = new Peer(id);
             connectionPeerDic.put(id, peer);
@@ -344,12 +382,12 @@ public class PeerConnectionManager {
         // 连接上ICE服务器
         @Override
         public void onIceConnectionChange(PeerConnection.IceConnectionState state) {
-
+            Log.i(TAG, "onIceConnectionChange" + state.toString());
         }
 
         @Override
         public void onIceConnectionReceivingChange(boolean b) {
-
+            Log.i(TAG, "onIceConnectionReceivingChange" + b);
         }
 
         @Override
@@ -363,7 +401,7 @@ public class PeerConnectionManager {
         @Override
         public void onIceCandidate(IceCandidate candidate) {
             // socket --> 去传递
-            Log.i(TAG, candidate.toString());
+            Log.i(TAG, "onIceCandidate - " + candidate.toString());
             webSocket.sendIceCandidate(socketId, candidate);
         }
 
@@ -375,6 +413,7 @@ public class PeerConnectionManager {
         // p2p建立成功之后 media(音/视频流) 子线程中进行的
         @Override
         public void onAddStream(MediaStream stream) {
+            Log.i(TAG, "7  PeerConnectionManager onAddStream: ");
             context.onAddRemoteStream(stream, socketId);
         }
 
@@ -401,20 +440,33 @@ public class PeerConnectionManager {
         // --------------- sdpobserver ------------------
 
         @Override
-        public void onCreateSuccess(SessionDescription description) {
+        public void onCreateSuccess(SessionDescription sdp) {
             // sdp => SessionDescription
-            Log.i(TAG, "onCreateSuccess");
+            Log.i(TAG, "3  PeerConnectionManager  sdp创建成功       " + sdp.description);
             // 设置本地的sdp,成功则回调onSetSuccess
-            pc.setLocalDescription(this, description);
+            pc.setLocalDescription(this, sdp);
         }
 
         @Override
         public void onSetSuccess() {
-            Log.i(TAG, "onSetSuccess");
+            Log.i(TAG, "4  PeerConnectionManager  sdp连接成功        " + pc.signalingState().toString()+"  role  " + curRole.toString());
             // 交换彼此的sdp
             if(pc.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER){
-                // websocket
-                webSocket.sendOffer(socketId, pc.getLocalDescription());
+                //判断连接状态为本地发送offer
+                if (curRole == Role.Receiver) {
+                    //接收者，发送Answer
+                    webSocket.sendAnswer(socketId, pc.getLocalDescription().description);
+                } else if (curRole == Role.Caller) {
+                    //发送者,发送自己的offer
+                    webSocket.sendOffer(socketId, pc.getLocalDescription().description);
+                }
+                // 由于设置了peerConnection.createAnswer
+            } else if (pc.signalingState() == PeerConnection.SignalingState.STABLE) {
+                // 把自己的sdp  发送给对方
+                if (curRole == Role.Receiver) {
+                    Log.i(TAG, "onSetSuccess: 最后一步测试");
+                    webSocket.sendAnswer(socketId, pc.getLocalDescription().description);
+                }
             }
         }
 
@@ -468,11 +520,17 @@ public class PeerConnectionManager {
                 ArrayList<String> myCopy;
                 myCopy = (ArrayList) connectionIdArray.clone();
                 for (String Id : myCopy) {
-                    closePeerConnection( Id);
+                    closePeerConnection(Id);
                 }
                 // 释放ID集合
                 if (connectionIdArray != null) {
                     connectionIdArray.clear();
+                }
+                // 释放本地流
+                if (localStream != null) {
+                    localStream.removeTrack(localAudioTrack);
+                    localStream.removeTrack(localVideoTrack);
+                    localStream = null;
                 }
                 // 释放音频源
                 if (audioSource != null) {

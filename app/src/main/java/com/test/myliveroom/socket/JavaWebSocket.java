@@ -33,6 +33,7 @@ public class JavaWebSocket {
     private Activity activity;
     private SSLSocketFactory factory;
     private PeerConnectionManager peerConnectionManager;
+    private static final String TAG = "TAG";
 
     public JavaWebSocket(Activity activity) {
         this.activity = activity;
@@ -111,19 +112,71 @@ public class JavaWebSocket {
     private void handleMessage(String message) {
         Map map = JSON.parseObject(message);
         String eventName = (String) map.get("eventName");
+        Log.i(TAG, "handleMessage: " + eventName);
         // p2p通信
         if(eventName.equals("_peers")){
             handleJoinRoom(map);
-        }else if(eventName.equals("_ice_candidate")){
-            // 对方的ice_candidate
+        }
+
+        // 对方的ice_candidate
+        if(eventName.equals("_ice_candidate")){
             handleRemaoteCandidate(map);
-        } else if(eventName.equals("_answer")){
-            // 对方的sdp
+        }
+
+        // 对方的sdp
+        if(eventName.equals("_answer")){
             handleAnswer(map);
+        }
+        // 新的人加入
+        if (eventName.equals("_new_peer")) {
+            handleRemoteInRoom(map);
+        }
+        // 接受邀请
+        if (eventName.equals("_offer")) {
+            handleOffer(map);
+        }
+
+        // 移除房间
+        if (eventName.equals("_remove_peer")) {
+            handleRemoveRoom(map);
+        }
+    }
+
+    private void handleRemoveRoom(Map map) {
+        Map data = (Map) map.get("data");
+        if (data != null) {
+            String socketId = (String) data.get("socketId");
+            peerConnectionManager.onRemoveRoom(socketId);
+
+        }
+    }
+
+    // 会议室发过来新的连接之后，随后会给你发送一个offer    被叫
+    private void handleOffer(Map map) {
+        Map data = (Map) map.get("data");
+        Map sdpDic;
+        if (data != null) {
+            sdpDic = (Map) data.get("sdp");
+            String socketId = (String) data.get("socketId");
+            String sdp = (String) sdpDic.get("sdp");
+            peerConnectionManager.onReceiveOffer(socketId, sdp);
+
+        }
+    }
+
+    // 自己已经在房间，有人进来
+    private void handleRemoteInRoom(Map map) {
+        Log.i(TAG, " 在房间，有人进来   handleRemoteInRoom: ");
+        Map data = (Map) map.get("data");
+        String socketId;
+        if (data != null) {
+            socketId = (String) data.get("socketId");
+            peerConnectionManager.onRemoteJoinToRoom(socketId);
         }
     }
 
     private void handleAnswer(Map map) {
+        Log.i(TAG, " 5  JavaWebSocket  handleAnswer: ");
         Map data = (Map) map.get("data");
         Map sdpDic;
         if(data != null){
@@ -136,6 +189,7 @@ public class JavaWebSocket {
 
     // 对方的ice_candidate
     private void handleRemaoteCandidate(Map map) {
+        Log.i(TAG, "JavaWebSocket  6   handleRemoteCandidate: ");
         Map data = (Map) map.get("data");
         String socketId;
         if(data != null){
@@ -143,7 +197,7 @@ public class JavaWebSocket {
             String sdpMid = (String) data.get("id");
             sdpMid = (null == sdpMid) ? "video" : sdpMid;
             int sdpMLineIndex = (int) Double.parseDouble(String.valueOf(data.get("label")));
-            String candidate = (String) data.get("candicate");
+            String candidate = (String) data.get("candidate");
             // candidate对象
             IceCandidate iceCandidate = new IceCandidate(sdpMid, sdpMLineIndex, candidate);
             peerConnectionManager.onRemoteIceCandidate(socketId, iceCandidate);
@@ -155,6 +209,7 @@ public class JavaWebSocket {
      * @param map
      */
     private void handleJoinRoom(Map map) {
+        Log.i(TAG, "  1  JavaWebSocket   handleJoinToRoom: ");
         Map data = (Map) map.get("data");
         JSONArray arr;
         if(data != null){
@@ -187,14 +242,34 @@ public class JavaWebSocket {
         map.put("data", childMap);
         JSONObject jsonObject = new JSONObject(map);
         String jsonString = jsonObject.toJSONString().toString();
+        Log.i(TAG, "send-->join");
         mSocketClient.send(jsonString);
     }
 
-    public void sendOffer(String id, SessionDescription sdp) {
+    public void sendAnswer(String socketId, String description) {
+        // 传入设定好的json格式
+        HashMap<String, Object> childMap1 = new HashMap();
+        childMap1.put("type", "answer");
+        childMap1.put("sdp", description);
+
+        HashMap<String, Object> childMap2 = new HashMap();
+        childMap2.put("socketId", socketId);
+        childMap2.put("sdp", childMap1);
+        HashMap<String, Object> map = new HashMap();
+        map.put("eventName", "__answer");
+        map.put("data", childMap2);
+
+        JSONObject object = new JSONObject(map);
+        String jsonString  = object.toString();
+        Log.i(TAG, "send-->answer");
+        mSocketClient.send(jsonString);
+    }
+
+    public void sendOffer(String id, String description) {
         // 传入设定好的json格式
         Map<String, Object> childMap1 = new HashMap<>();
         childMap1.put("type", "offer");
-        childMap1.put("sdp", sdp.description);
+        childMap1.put("sdp", description);
 
         Map<String, Object> childMap = new HashMap<>();
         childMap.put("socketId", id);
@@ -205,6 +280,7 @@ public class JavaWebSocket {
         map.put("data", childMap);
         JSONObject jsonObject = new JSONObject(map);
         String jsonString = jsonObject.toJSONString().toString();
+        Log.i(TAG, "send-->offer");
         mSocketClient.send(jsonString);
     }
 
@@ -221,6 +297,7 @@ public class JavaWebSocket {
         map.put("data", childMap);
         JSONObject jsonObject = new JSONObject(map);
         String jsonString = jsonObject.toJSONString().toString();
+        Log.i(TAG, "send-->IceCandidate");
         mSocketClient.send(jsonString);
     }
 

@@ -23,7 +23,7 @@ public class MainActivity extends AppCompatActivity {
         et_room = findViewById(R.id.et_room);
         edit_test_wss = findViewById(R.id.et_wss);
 
-        et_room.setText("123456");
+        et_room.setText("666555");
     }
 
 
