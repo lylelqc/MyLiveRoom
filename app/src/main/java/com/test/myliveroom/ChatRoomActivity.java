@@ -131,7 +131,7 @@ public class ChatRoomActivity extends AppCompatActivity {
         int size = videoViews.size();
         for(int i = 0; i < size; i++){
             String peerId = person.get(i);
-            SurfaceViewRenderer renderer1 = videoViews.get(id);
+            SurfaceViewRenderer renderer1 = videoViews.get(peerId);
             if(renderer1 != null){
                 FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
