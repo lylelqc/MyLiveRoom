@@ -29,7 +29,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void JoinRoom(View view) {
         WebRTCManager webRTCManager = WebRTCManager.getInstance();
-        webRTCManager.connect(this,  et_room.getText().toString().trim());
+        webRTCManager.connect(this, et_signal.getText().toString().trim(), et_room.getText().toString().trim());
     }
 
     public void JoinRoomSingleAudio(View view) {

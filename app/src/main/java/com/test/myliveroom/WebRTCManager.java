@@ -27,12 +27,12 @@ public class WebRTCManager {
 
     }
 
-    public void connect(Activity activity, String roomId){
+    public void connect(Activity activity, String signal, String roomId){
         this.roomID = roomId;
         mWebSocket = new JavaWebSocket(activity);
         mPeerConnectionManager = PeerConnectionManager.getInstance();
         // websocket协议开头 wss
-        mWebSocket.connect("wss://121.41.33.93/wss");
+        mWebSocket.connect(signal);
     }
 
     public void joinRoom(ChatRoomActivity activity, EglBase rootEglBase) {

@@ -451,7 +451,9 @@ public class PeerConnectionManager {
         public void onSetSuccess() {
             Log.i(TAG, "4  PeerConnectionManager  sdp连接成功        " + pc.signalingState().toString()+"  role  " + curRole.toString());
             // 交换彼此的sdp
-            if(pc.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER){
+            if (pc.signalingState() == PeerConnection.SignalingState.HAVE_REMOTE_OFFER) {
+                pc.createAnswer(Peer.this, offerOrAnswerConstraint());
+            } else if(pc.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER){
                 //判断连接状态为本地发送offer
                 if (curRole == Role.Receiver) {
                     //接收者，发送Answer

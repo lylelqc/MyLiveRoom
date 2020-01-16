@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">webrtc</string>
+    <string name="app_name">MyLiveRoom</string>
     <string name="webrtc_chat_mute">静音</string>
     <string name="webrtc_chat_hands_free">免提</string>
     <string name="webrtc_chat_refuse">拒接</string>
